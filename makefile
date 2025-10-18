@@ -1,13 +1,12 @@
 ENV_NAME = crafter_env
-PYTHON_VERSION = 3.12
+YAML_FILE = environment.yml
 
 .PHONY: crafter_env
 crafter_env:
-	conda create -y -n $(ENV_NAME) python=$(PYTHON_VERSION)
+	conda env create -f $(YAML_FILE) || conda env update -f $(YAML_FILE) --prune
 
 .PHONY: install
 install: crafter_env
-	conda run -n $(ENV_NAME) pip install --upgrade pip
 	conda run -n $(ENV_NAME) pip install -r requirements.txt
 
 .PHONY: clean
