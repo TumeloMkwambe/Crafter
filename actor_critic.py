@@ -14,16 +14,13 @@ class Actor_Critic(nn.Module):
 
         self.critic = nn.Linear(resnet.fc.in_features, 1)
 
-        self.softmax = nn.Softmax(dim = 1)
-
     def forward(self, x):
 
         features = self.feature_extractor(x)
         features = features.view(features.size(0), -1)
 
         logits = self.actor(features)
-        probs = self.softmax(logits)
         
         values = self.critic(features)
 
-        return probs, values
+        return logits, values
