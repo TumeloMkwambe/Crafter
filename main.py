@@ -1,5 +1,6 @@
 import stable_baselines3 as sb3
 
+from evaluation import evaluation_episode
 from actor_critic import Actor_Critic
 from env_setup import init_env
 from config import config
@@ -20,4 +21,8 @@ if __name__ == "__main__":
 
     ppo.flatten()
 
-    ppo.training_loop()
+    ac = ppo.training_loop()
+
+    env = init_env()
+
+    evaluation_episode(env, ppo.model, config, "base-1")

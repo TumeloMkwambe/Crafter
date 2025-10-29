@@ -3,16 +3,14 @@ from torch.utils.data import Dataset
 
 class Dataset(Dataset):
     
-    def __init__(self, observations, actions, log_probs, values, returns, advantages):
+    def __init__(self, observations, actions, log_probs, returns, advantages):
         
         self.observations = observations
         
         self.actions = actions
         
         self.log_probs = log_probs
-        
-        self.values = values
-        
+                
         self.returns = returns
         
         self.advantages = advantages
@@ -28,12 +26,10 @@ class Dataset(Dataset):
         acts = self.actions[idx]
         
         log_probs = self.log_probs[idx]
-        
-        values = self.values[idx]
-        
+                
         returns = self.returns[idx]
         
         advantages = self.advantages[idx]
 
-        return obs, acts, log_probs, values, returns, advantages
+        return obs, acts, log_probs, returns, advantages
 

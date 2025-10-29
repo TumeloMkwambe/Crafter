@@ -1,10 +1,19 @@
 import matplotlib.pyplot as plt
 import wandb
+import torch
 import cv2
 
-def evaluation_episode(env, model, config):
+def observation_preprocessing(observations):
+        
+    observations = torch.tensor(observations).unsqueeze(0)
+    observations = observations.permute(0, 3, 1, 2) # from [N, H, W, C] to [N, C, H, W]
+    observations = observations.float() / 255.0
+        
+    return observations
+
+def evaluation_episode(env, model, config, run_name = ""):
     
-    wandb.init(entity = "reinforcement-learning-wits", project = "Crafter", name = "", config = config) 
+    wandb.init(entity = "reinforcement-learning-wits", project = "Crafter", name = run_name, config = config) 
     
     observation, info = env.reset() 
     
@@ -13,8 +22,18 @@ def evaluation_episode(env, model, config):
     reward_sum = 0
     
     while not terminated:
+
+        observation = observation_preprocessing(observation)
         
-        action, _ = model.predict(observation, deterministic = True)
+        model.eval()
+        
+        with torch.no_grad():
+            
+            logits, _ = model(observation)
+            
+            distros = torch.distributions.Categorical(logits = logits)
+            
+            action = int(distros.sample())
         
         observation, reward, terminated, truncated, info = env.step(action)
         
@@ -23,7 +42,6 @@ def evaluation_episode(env, model, config):
         wandb.log(info['achievements'])
     
     wandb.finish()
-
 
 def image_display(img):
     

@@ -10,9 +10,11 @@ from data import Dataset
 class PPO:
 
     def __init__(self, vec_env, model, config):
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         self.vec_env = vec_env
-        self.model = model
+        self.model = model.to(self.device)
         self.n_steps = config['N_STEPS']
         self.gamma = config['GAMMA']
         self.lambda_ = config['LAMBDA']
@@ -73,23 +75,21 @@ class PPO:
 
         obs = self.data["observations"][0].shape
 
-        self.data["observations"] = torch.stack(self.data["observations"])
+        self.data["observations"] = torch.stack(self.data["observations"]).to(self.device)
         
-        self.data["actions"] = torch.cat(self.data["actions"]).view(len(self.data["actions"]), -1)
+        self.data["actions"] = torch.cat(self.data["actions"]).view(len(self.data["actions"]), -1).to(self.device)
 
-        self.data["log_probs"] = torch.cat(self.data["log_probs"]).view(len(self.data["log_probs"]), -1)
+        self.data["log_probs"] = torch.cat(self.data["log_probs"]).view(len(self.data["log_probs"]), -1).to(self.device)
 
-        self.data["values"] = torch.cat(self.data["values"]).view(len(self.data["values"]), -1)
+        self.data["values"] = torch.cat(self.data["values"]).view(len(self.data["values"]), -1).to(self.device)
 
-        self.data["rewards"] = torch.tensor(np.stack(self.data["rewards"]), dtype = torch.float32)
+        self.data["rewards"] = torch.tensor(np.stack(self.data["rewards"]), dtype = torch.float32).to(self.device)
         
-        self.data["dones"] = torch.tensor(np.stack(self.data["dones"]), dtype = torch.float32)
+        self.data["dones"] = torch.tensor(np.stack(self.data["dones"]), dtype = torch.float32).to(self.device)
     
     def advantages_collector(self):
 
         rewards = self.data['rewards']
-
-        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
 
         values = self.data["values"]
 
@@ -97,9 +97,9 @@ class PPO:
 
         T, n_envs = rewards.shape
         
-        gae = torch.zeros(n_envs)
+        gae = torch.zeros(n_envs, device = self.device)
         
-        advantages = torch.zeros_like(rewards)
+        advantages = torch.zeros_like(rewards, device = self.device)
         
         for t in reversed(range(T)):
             
@@ -109,12 +109,11 @@ class PPO:
             
             advantages[t] = gae
 
+        returns = advantages + values[:-1]
+
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        self.data['returns'] = advantages + values[:-1]
-
-        self.data['values'] = values[:-1]
-
+        self.data['returns'] = returns
         self.data['advantages'] = advantages
 
     def flatten(self):
@@ -124,8 +123,6 @@ class PPO:
         self.data["actions"] = torch.flatten(self.data["actions"], start_dim = 0, end_dim = 1)
 
         self.data["log_probs"] = torch.flatten(self.data["log_probs"], start_dim = 0, end_dim = 1)
-
-        self.data["values"] = torch.flatten(self.data["values"], start_dim = 0, end_dim = 1)
 
         self.data["advantages"] = torch.flatten(self.data["advantages"], start_dim = 0, end_dim = 1)
 
@@ -137,7 +134,6 @@ class PPO:
             self.data["observations"],
             self.data["actions"],
             self.data["log_probs"],
-            self.data["values"],
             self.data["returns"],
             self.data["advantages"]
         )
@@ -155,10 +151,16 @@ class PPO:
         
             clip_loss = 0.0
             vf_loss = 0.0
-            entropy = 0.0
+            entropy_bonus = 0.0
             train_loss = 0.0
         
-            for obs, acts, log_probs, values, returns, advantages in dataloader:
+            for obs, acts, log_probs, returns, advantages in dataloader:
+
+                obs = obs.to(self.device)
+                acts = acts.to(self.device)
+                log_probs = log_probs.to(self.device)
+                returns = returns.to(self.device)
+                advantages = advantages.to(self.device)
 
                 optimizer.zero_grad()
                 
@@ -184,7 +186,7 @@ class PPO:
 
                 clip_loss += L_CLIP.item()
                 vf_loss += L_VF.item()
-                entropy += entropy.item()
+                entropy_bonus += entropy.item()
                 train_loss += loss.item()
         
                 loss.backward()
@@ -193,7 +195,7 @@ class PPO:
         
             clip_loss /= len(dataloader)
             vf_loss /= len(dataloader)
-            entropy /= len(dataloader)
+            entropy_bonus /= len(dataloader)
             train_loss /= len(dataloader)
 
-            print(f'Loss: {train_loss} | L_CLIP: {clip_loss} | L_VF: {vf_loss} | Entropy: {entropy}\n')
+            print(f'Loss: {train_loss} | L_CLIP: {clip_loss} | L_VF: {vf_loss} | Entropy: {entropy_bonus}\n')
