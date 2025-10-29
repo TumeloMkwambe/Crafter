@@ -3,6 +3,8 @@ import wandb
 import torch
 import cv2
 
+from config import config
+
 def observation_preprocessing(observations):
         
     observations = torch.tensor(observations).unsqueeze(0)
@@ -11,9 +13,13 @@ def observation_preprocessing(observations):
         
     return observations
 
-def evaluation_episode(env, model):
+def evaluation_episode(env, model, log = False, run_name = None):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if log:
+
+        wandb.init(entity = "reinforcement-learning-wits", project = "Crafter", name = run_name, config = config)
     
     observation, info = env.reset()
     
@@ -46,6 +52,14 @@ def evaluation_episode(env, model):
         info['achievements']['reward'] = reward
 
         achievements = {key: achievements[key] + info['achievements'][key] if key in achievements else info['achievements'][key] for key in info['achievements']}
+
+        if log:
+
+            wandb.log(achievements)
+    
+    if log:
+        
+        wandb.finish()
     
     achievements['episode_length'] = episode_length
 

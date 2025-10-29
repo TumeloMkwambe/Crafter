@@ -1,3 +1,4 @@
+import os
 import torch
 import wandb
 import stable_baselines3 as sb3
@@ -8,13 +9,16 @@ from env_setup import init_env
 from config import config
 from ppo import PPO
 
-if __name__ == "__main__":
+def train_ppo_agent():
 
     env_vec = sb3.common.env_util.make_vec_env(env_id = init_env, n_envs = config['NUM_ENVS'])
 
     model = Actor_Critic(n_actions = env_vec.action_space.n)
 
-    #wandb.init(entity = "reinforcement-learning-wits", project = "Crafter", name = "base", config = config)
+    if os.path.exists('ppo-agent'):
+
+        state_dict = torch.load('ppo-agent', map_location = 'cpu')
+        model.load_state_dict(state_dict)
 
     for i in range(10):
 
@@ -34,16 +38,16 @@ if __name__ == "__main__":
 
         env = init_env()
 
-        achievements = evaluation_episode(env, ppo.model)
+        achievements = evaluation_episode(env = env, model = ppo.model, log = False)
 
         model = ppo.model
-
-        #wandb.log(achievements)
 
         print(f'RUN {i + 1} | ACHIEVEMENTS: {achievements}\n')
 
         env.close()
     
-    torch.save(model.state_dict(), 'model-base')
+    torch.save(model.state_dict(), 'ppo-agent')
 
-    #wandb.finish()
+if __name__ == "__main__":
+
+    train_ppo_agent()

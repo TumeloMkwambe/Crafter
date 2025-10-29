@@ -59,7 +59,7 @@ class PPO:
             self.data["dones"].append(dones)
             self.data["infos"].append(infos)
             
-            self.count_steps += self.vec_env.num_envs
+            self.count_steps += 1
             observations = next_observations
 
         with torch.no_grad():

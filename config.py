@@ -1,6 +1,6 @@
 config = {
-    'NUM_ENVS': 16,
-    'N_STEPS': 50000,
+    'NUM_ENVS': 8,
+    'N_STEPS': 1024,
     'GAMMA': 0.95,
     'LAMBDA': 0.9,
     'BATCH_SIZE': 50,
