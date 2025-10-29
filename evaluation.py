@@ -11,23 +11,29 @@ def observation_preprocessing(observations):
         
     return observations
 
-def evaluation_episode(env, model, config, run_name = ""):
+def evaluation_episode(env, model):
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    wandb.init(entity = "reinforcement-learning-wits", project = "Crafter", name = run_name, config = config) 
-    
-    observation, info = env.reset() 
+    observation, info = env.reset()
     
     terminated = False
-    
-    reward_sum = 0
-    
+
+    achievements = {}
+
+    episode_length = 0
+
     while not terminated:
+
+        episode_length += 1
 
         observation = observation_preprocessing(observation)
         
         model.eval()
         
         with torch.no_grad():
+
+            observation = observation.to(device)
             
             logits, _ = model(observation)
             
@@ -38,10 +44,12 @@ def evaluation_episode(env, model, config, run_name = ""):
         observation, reward, terminated, truncated, info = env.step(action)
         
         info['achievements']['reward'] = reward
-        
-        wandb.log(info['achievements'])
+
+        achievements = {key: achievements[key] + info['achievements'][key] if key in achievements else info['achievements'][key] for key in info['achievements']}
     
-    wandb.finish()
+    achievements['episode_length'] = episode_length
+
+    return achievements
 
 def image_display(img):
     

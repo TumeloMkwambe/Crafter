@@ -4,7 +4,6 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from config import config
 from data import Dataset
 
 class PPO:
@@ -15,9 +14,7 @@ class PPO:
         
         self.vec_env = vec_env
         self.model = model.to(self.device)
-        self.n_steps = config['N_STEPS']
-        self.gamma = config['GAMMA']
-        self.lambda_ = config['LAMBDA']
+        self.config = config
 
         self.data = {"observations": [], "actions": [], "log_probs": [], "values": [], "rewards": [], "dones": [], "infos": []}
         self.count_steps = 0
@@ -34,13 +31,15 @@ class PPO:
         
         observations = self.vec_env.reset()
         
-        while self.count_steps < self.n_steps:
+        while self.count_steps < self.config['N_STEPS']:
 
             observations = self.observation_preprocessing(observations)
 
             self.model.eval()
             
             with torch.no_grad():
+
+                observations = observations.to(self.device)
                 
                 logits, values = self.model(observations)
                 
@@ -66,6 +65,8 @@ class PPO:
         with torch.no_grad():
 
             observations = self.observation_preprocessing(observations)
+
+            observations = observations.to(self.device)
 
             _, values = self.model(observations)
 
@@ -103,9 +104,9 @@ class PPO:
         
         for t in reversed(range(T)):
             
-            delta = rewards[t] + config['GAMMA'] * values[t + 1] * (1 - dones[t]) - values[t]
+            delta = rewards[t] + self.config['GAMMA'] * values[t + 1] * (1 - dones[t]) - values[t]
             
-            gae = delta + config['GAMMA'] * config['LAMBDA'] * (1 - dones[t]) * gae
+            gae = delta + self.config['GAMMA'] * self.config['LAMBDA'] * (1 - dones[t]) * gae
             
             advantages[t] = gae
 
@@ -128,7 +129,7 @@ class PPO:
 
         self.data["returns"] = torch.flatten(self.data["returns"], start_dim = 0, end_dim = 1)
 
-    def training_loop(self):
+    def training_loop(self, verbose = True):
 
         dataset = Dataset(
             self.data["observations"],
@@ -138,16 +139,14 @@ class PPO:
             self.data["advantages"]
         )
         
-        dataloader = DataLoader(dataset, batch_size = config['BATCH_SIZE'], shuffle = True)
+        dataloader = DataLoader(dataset, batch_size = self.config['BATCH_SIZE'], shuffle = True)
 
-        optimizer = torch.optim.Adam(self.model.parameters(), lr = config['LEARNING_RATE'])
+        optimizer = torch.optim.Adam(self.model.parameters(), lr = self.config['LEARNING_RATE'])
         mse = nn.MSELoss()
 
         self.model.train()
         
-        for epoch in range(config['N_EPOCHS']):
-
-            print(f'EPOCH {epoch + 1}')
+        for epoch in range(self.config['N_EPOCHS']):
         
             clip_loss = 0.0
             vf_loss = 0.0
@@ -174,7 +173,7 @@ class PPO:
         
                 unclipped = ratios * advantages
         
-                clipped = torch.clamp(ratios, 1 - config['EPSILON'], 1 + config['EPSILON']) * advantages
+                clipped = torch.clamp(ratios, 1 - self.config['EPSILON'], 1 + self.config['EPSILON']) * advantages
         
                 L_CLIP = -torch.mean(torch.min(clipped, unclipped))
         
@@ -182,7 +181,7 @@ class PPO:
         
                 entropy = new_distros.entropy().mean()
         
-                loss = L_CLIP + config['C1'] * L_VF - config['C2'] * entropy
+                loss = L_CLIP + self.config['C1'] * L_VF - self.config['C2'] * entropy
 
                 clip_loss += L_CLIP.item()
                 vf_loss += L_VF.item()
@@ -190,7 +189,7 @@ class PPO:
                 train_loss += loss.item()
         
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), config['MAX_GRAD_NORM'])
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['MAX_GRAD_NORM'])
                 optimizer.step()
         
             clip_loss /= len(dataloader)
@@ -198,4 +197,6 @@ class PPO:
             entropy_bonus /= len(dataloader)
             train_loss /= len(dataloader)
 
-            print(f'Loss: {train_loss} | L_CLIP: {clip_loss} | L_VF: {vf_loss} | Entropy: {entropy_bonus}\n')
+            if verbose  == True:
+                print(f'EPOCH {epoch + 1} | Loss: {train_loss} | L_CLIP: {clip_loss} | L_VF: {vf_loss} | Entropy: {entropy_bonus}\n')
+
