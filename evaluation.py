@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
+import numpy as np
 import wandb
 import torch
-import cv2
 
 from config import config
 
@@ -65,12 +65,39 @@ def evaluation_episode(env, model, log = False, run_name = None):
 
     return achievements
 
-def image_display(img):
+def metrics(env, model, n_episodes):
+
+    achievement_rates = {}
+
+    for _ in range(n_episodes):
+
+        achievements = evaluation_episode(env, model)
+
+        rewards = achievements['reward']
+        episode_length = achievements['episode_length']
+        
+        achievement_masks = {key: 1 if achievements[key] != 0 else 0 for key in achievements}
+
+        achievement_masks['reward'] = rewards
+        achievement_masks['episode_length'] = episode_length
+        
+        for key, value in achievement_masks.items():
+
+            if key not in achievement_rates:
+
+                achievement_rates[key] = 0
+
+            achievement_rates[key] += value
     
-    plt.figure(figsize = (6, 6))
+    for key in achievement_rates:
+
+        achievement_rates[key] /= n_episodes
     
-    plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-    
-    plt.axis('off')
-    
-    plt.show()
+    nontrivial_keys = [k for k in achievement_rates if k not in ["reward", "episode_length"]]
+    eps = 1e-8
+    values = [max(achievement_rates[k], eps) for k in nontrivial_keys]
+
+    geometric_mean = float(np.exp(np.mean(np.log(values)))) if len(values) > 0 else 0.0
+    achievement_rates["geometric_mean"] = geometric_mean
+
+    return achievement_rates

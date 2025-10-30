@@ -8,21 +8,25 @@ from data import Dataset
 
 class PPO:
 
-    def __init__(self, vec_env, model, config):
+    def __init__(self, vec_env, actor_critic, config):
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         self.vec_env = vec_env
-        self.model = model.to(self.device)
+        self.actor_critic = actor_critic.to(self.device)
         self.config = config
 
+        self.data = {"observations": [], "actions": [], "log_probs": [], "values": [], "rewards": [], "dones": [], "infos": []}
+        self.count_steps = 0
+    
+    def reset_data(self):
+        
         self.data = {"observations": [], "actions": [], "log_probs": [], "values": [], "rewards": [], "dones": [], "infos": []}
         self.count_steps = 0
 
     def observation_preprocessing(self, observations):
         
-        observations = torch.tensor(observations)
-        observations = observations.permute(0, 3, 1, 2) # from [N, H, W, C] to [N, C, H, W]
+        observations = torch.from_numpy(observations).permute(0, 3, 1, 2) # from [N, H, W, C] to [N, C, H, W]
         observations = observations.float() / 255.0
         
         return observations
@@ -35,13 +39,13 @@ class PPO:
 
             observations = self.observation_preprocessing(observations)
 
-            self.model.eval()
+            self.actor_critic.eval()
             
             with torch.no_grad():
 
                 observations = observations.to(self.device)
                 
-                logits, values = self.model(observations)
+                logits, values = self.actor_critic(observations)
                 
                 distros = torch.distributions.Categorical(logits = logits)
                 
@@ -68,26 +72,24 @@ class PPO:
 
             observations = observations.to(self.device)
 
-            _, values = self.model(observations)
+            _, values = self.actor_critic(observations)
 
             self.data["values"].append(values)
 
     def stack(self):
 
-        obs = self.data["observations"][0].shape
+        self.data["observations"] = torch.stack(self.data["observations"]).cpu()
 
-        self.data["observations"] = torch.stack(self.data["observations"]).to(self.device)
-        
-        self.data["actions"] = torch.cat(self.data["actions"]).view(len(self.data["actions"]), -1).to(self.device)
+        self.data["actions"] = torch.cat(self.data["actions"]).view(len(self.data["actions"]), -1).cpu()
 
-        self.data["log_probs"] = torch.cat(self.data["log_probs"]).view(len(self.data["log_probs"]), -1).to(self.device)
+        self.data["log_probs"] = torch.cat(self.data["log_probs"]).view(len(self.data["log_probs"]), -1).cpu()
 
-        self.data["values"] = torch.cat(self.data["values"]).view(len(self.data["values"]), -1).to(self.device)
+        self.data["values"] = torch.cat(self.data["values"]).view(len(self.data["values"]), -1).cpu()
 
-        self.data["rewards"] = torch.tensor(np.stack(self.data["rewards"]), dtype = torch.float32).to(self.device)
-        
-        self.data["dones"] = torch.tensor(np.stack(self.data["dones"]), dtype = torch.float32).to(self.device)
-    
+        self.data["rewards"] = torch.tensor(np.stack(self.data["rewards"]), dtype = torch.float32).cpu()
+
+        self.data["dones"] = torch.tensor(np.stack(self.data["dones"]), dtype = torch.float32).cpu()
+
     def advantages_collector(self):
 
         rewards = self.data['rewards']
@@ -98,10 +100,10 @@ class PPO:
 
         T, n_envs = rewards.shape
         
-        gae = torch.zeros(n_envs, device = self.device)
-        
-        advantages = torch.zeros_like(rewards, device = self.device)
-        
+        gae = torch.zeros(n_envs, device = 'cpu')
+
+        advantages = torch.zeros_like(rewards, device = 'cpu')
+
         for t in reversed(range(T)):
             
             delta = rewards[t] + self.config['GAMMA'] * values[t + 1] * (1 - dones[t]) - values[t]
@@ -141,10 +143,10 @@ class PPO:
         
         dataloader = DataLoader(dataset, batch_size = self.config['BATCH_SIZE'], shuffle = True)
 
-        optimizer = torch.optim.Adam(self.model.parameters(), lr = self.config['LEARNING_RATE'])
+        optimizer = torch.optim.Adam(self.actor_critic.parameters(), lr = self.config['LEARNING_RATE'])
         mse = nn.MSELoss()
 
-        self.model.train()
+        self.actor_critic.train()
         
         for epoch in range(self.config['N_EPOCHS']):
         
@@ -162,8 +164,8 @@ class PPO:
                 advantages = advantages.to(self.device)
 
                 optimizer.zero_grad()
-                
-                new_logits, new_values = self.model(obs)
+
+                new_logits, new_values = self.actor_critic(obs)
 
                 new_distros = torch.distributions.Categorical(logits = new_logits)
                 
@@ -189,7 +191,7 @@ class PPO:
                 train_loss += loss.item()
         
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['MAX_GRAD_NORM'])
+                torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.config['MAX_GRAD_NORM'])
                 optimizer.step()
         
             clip_loss /= len(dataloader)
@@ -200,3 +202,28 @@ class PPO:
             if verbose  == True:
                 print(f'EPOCH {epoch + 1} | Loss: {train_loss} | L_CLIP: {clip_loss} | L_VF: {vf_loss} | Entropy: {entropy_bonus}\n')
 
+    def learn(self, total_timesteps, verbose = True):
+
+        count_total_steps = 0
+
+        while count_total_steps < total_timesteps:
+
+            self.data_collection()
+
+            count_total_steps += self.config['N_STEPS']
+
+            self.stack()
+
+            self.advantages_collector()
+
+            self.flatten()
+
+            if verbose:
+
+                print(f"= = = = = ITERATION (STEPS: {min(self.count_steps, total_timesteps)} / {total_timesteps}) = = = = =")
+
+            self.training_loop(verbose = False)
+
+            self.reset_data()
+    
+        return self.actor_critic
