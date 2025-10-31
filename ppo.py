@@ -186,7 +186,7 @@ class PPO:
         
                 loss = L_CLIP + self.config['C1'] * L_VF - self.config['C2'] * entropy
 
-                if self.divergence_check:
+                if self.divergence_check: # Second Improvement: KL Divergence Early Stopping Criterion (Strengthen policy update stability)
 
                     with torch.no_grad():
 

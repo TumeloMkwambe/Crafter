@@ -69,18 +69,16 @@ def report_metrics(agent, agent_name):
 
 if __name__ == "__main__":
 
-    agent_name = 'ppo-agent-iii'
+    agent_name = 'ppo-agent-i' # ppo-agent-i (resnet, no kl check), ppo-agent-ii (naturecnn, kl check), ppo-agent-iii (naturecnn, no kl check)
 
-    train_ppo_agent(agent_name)
+    #train_ppo_agent(agent_name) Used to train the agent and save the model
 
-    '''
     env = init_env()
 
-    model = Actor_Critic_I(n_actions = env.action_space.n)
+    model = Actor_Critic_II(n_actions = env.action_space.n) # change to Actor_Critic_I for ppo-agent-i, else Actor_Critic_II for ppo-agent-ii and ppo-agent-iii
     state_dict = torch.load(f'./models/{agent_name}', map_location = 'cpu')
     model.load_state_dict(state_dict)
 
     env.close()
 
     report_metrics(agent = model, agent_name = agent_name)
-    '''

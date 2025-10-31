@@ -14,3 +14,7 @@ conda activate crafter_env
 
 ### 3. Install Additional Dependencies
 make install
+
+
+# Run Agent Using (More instructions in code comments)
+``` python main.py
