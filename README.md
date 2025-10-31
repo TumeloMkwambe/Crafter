@@ -1,5 +1,7 @@
 # Crafter
 
+![Random_and_PPO3](./random-ppo3.png)
+
 ## Setup Instructions
 
 ### 1. Setup Environment & Install Dependencies
