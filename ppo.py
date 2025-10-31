@@ -8,13 +8,14 @@ from data import Dataset
 
 class PPO:
 
-    def __init__(self, vec_env, actor_critic, config):
+    def __init__(self, vec_env, actor_critic, config, divergence_check = False):
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         self.vec_env = vec_env
         self.actor_critic = actor_critic.to(self.device)
         self.config = config
+        self.divergence_check = divergence_check
 
         self.data = {"observations": [], "actions": [], "log_probs": [], "values": [], "rewards": [], "dones": [], "infos": []}
         self.count_steps = 0
@@ -184,6 +185,20 @@ class PPO:
                 entropy = new_distros.entropy().mean()
         
                 loss = L_CLIP + self.config['C1'] * L_VF - self.config['C2'] * entropy
+
+                if self.divergence_check:
+
+                    with torch.no_grad():
+
+                        approx_kl_div = torch.mean((ratios - 1) - (new_log_probs - log_probs)).cpu().numpy()
+
+                    if approx_kl_div > 1.5 * self.config['TARGET_KL']:
+
+                        if verbose >= 1:
+
+                            print(f"Early stopping at step {epoch} due to reaching max kl: {approx_kl_div:.2f}")
+
+                        break
 
                 clip_loss += L_CLIP.item()
                 vf_loss += L_VF.item()

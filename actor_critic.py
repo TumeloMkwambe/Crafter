@@ -31,7 +31,7 @@ class Actor_Critic_I(nn.Module):
 
         return logits, values
 
-class Actor_Critic_II(nn.Module):
+class Actor_Critic_II(nn.Module): # First Improvement: Fine-tune Pretrained ResNet50 As Feature Extractor.
 
     def __init__(self, n_actions):
         super().__init__()

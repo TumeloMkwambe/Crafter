@@ -12,7 +12,7 @@ def train_ppo_agent(agent_name):
 
     env_vec = sb3.common.env_util.make_vec_env(env_id = init_env, n_envs = config['NUM_ENVS'])
 
-    model = Actor_Critic_II(n_actions = env_vec.action_space.n)
+    model = Actor_Critic_I(n_actions = env_vec.action_space.n)
 
     if os.path.exists(os.path.join('models', agent_name)):
 
@@ -21,7 +21,7 @@ def train_ppo_agent(agent_name):
     
     for i in range(10):
 
-        ppo = PPO(vec_env = env_vec, actor_critic = model, config = config)
+        ppo = PPO(vec_env = env_vec, actor_critic = model, config = config, divergence_check = True)
 
         ppo.learn(total_timesteps = config['TOTAL_STEPS'], verbose = False)
 
@@ -69,7 +69,7 @@ def report_metrics(agent, agent_name):
 
 if __name__ == "__main__":
 
-    agent_name = 'ppo-agent-ii'
+    agent_name = 'ppo-agent-iii'
 
     train_ppo_agent(agent_name)
 
