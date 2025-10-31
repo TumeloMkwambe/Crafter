@@ -49,7 +49,7 @@ def evaluation_episode(env, model, log = False, run_name = None):
         
         observation, reward, terminated, truncated, info = env.step(action)
         
-        info['achievements']['reward'] = reward
+        info['achievements']['return'] = reward
 
         achievements = {key: achievements[key] + info['achievements'][key] if key in achievements else info['achievements'][key] for key in info['achievements']}
 
@@ -65,20 +65,20 @@ def evaluation_episode(env, model, log = False, run_name = None):
 
     return achievements
 
-def metrics(env, model, n_episodes):
+def metrics(env, model, n_episodes = 10, log = False, run_name = None):
 
     achievement_rates = {}
 
     for _ in range(n_episodes):
 
-        achievements = evaluation_episode(env, model)
+        achievements = evaluation_episode(env, model, log, run_name)
 
-        rewards = achievements['reward']
+        rewards = achievements['return']
         episode_length = achievements['episode_length']
         
         achievement_masks = {key: 1 if achievements[key] != 0 else 0 for key in achievements}
 
-        achievement_masks['reward'] = rewards
+        achievement_masks['return'] = rewards
         achievement_masks['episode_length'] = episode_length
         
         for key, value in achievement_masks.items():
@@ -92,12 +92,16 @@ def metrics(env, model, n_episodes):
     for key in achievement_rates:
 
         achievement_rates[key] /= n_episodes
-    
-    nontrivial_keys = [k for k in achievement_rates if k not in ["reward", "episode_length"]]
-    eps = 1e-8
-    values = [max(achievement_rates[k], eps) for k in nontrivial_keys]
 
-    geometric_mean = float(np.exp(np.mean(np.log(values)))) if len(values) > 0 else 0.0
-    achievement_rates["geometric_mean"] = geometric_mean
+    nontrivial_keys = [key for key in achievement_rates if key not in ['return', 'episode_length']]
+
+    percents = np.array([achievement_rates[key] * 100 for key in nontrivial_keys])
+
+    crafter_score = float(np.exp(np.mean(np.log(1 + percents))) - 1)
+
+    geometric_mean = crafter_score / 100
+
+    achievement_rates['geometric_mean'] = geometric_mean
+    achievement_rates['crafter_score_percents'] = crafter_score
 
     return achievement_rates
